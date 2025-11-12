@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Мой Repo Browser</title>
+  <style>
+    body{font-family:system-ui,Arial,sans-serif;margin:0;background:#0d1117;color:#e6edf3}
+    header{background:#161b22;padding:16px;border-bottom:1px solid #30363d}
+    h1{margin:0;font-size:20px}
+    .wrap{max-width:960px;margin:auto;padding:20px}
+    .path{font-size:13px;color:#8b949e;margin-bottom:10px}
+    ul{list-style:none;padding:0;margin:0}
+    li{padding:6px 10px;border-radius:6px;cursor:pointer}
+    li:hover{background:#21262d}
+    .folder::before{content:"📁 "}
+    .file::before{content:"📄 "}
+    pre{background:#161b22;padding:12px;border-radius:6px;overflow:auto}
+    .hidden{display:none}
+  </style>
+</head>
+<body>
+  <header><div class="wrap"><h1>Мой Repo Browser</h1></div></header>
+  <div class="wrap">
+    <div class="path" id="path">/</div>
+    <ul id="list"></ul>
+    <pre id="viewer" class="hidden"></pre>
+  </div>
+
+  <script>
+    const listEl = document.getElementById("list");
+    const viewer = document.getElementById("viewer");
+    const pathEl = document.getElementById("path");
+    let manifest = {};
+    let current = "root";
+    let currentPath = "/";
+
+    async function loadManifest(){
+      try{
+        const r = await fetch("manifest.json");
+        manifest = await r.json();
+        renderList("root");
+      }catch(e){
+        listEl.innerHTML = "<li>manifest.json не найден</li>";
+      }
+    }
+
+    function renderList(key){
+      const files = manifest[key] || [];
+      listEl.innerHTML = "";
+      if(key !== "root"){
+        const up = document.createElement("li");
+        up.textContent = "..";
+        up.onclick = () => navigateUp(key);
+        listEl.appendChild(up);
+      }
+      files.forEach(item=>{
+        const li = document.createElement("li");
+        li.textContent = item.name;
+        li.className = item.type;
+        li.onclick = () => {
+          if(item.type==="folder") openFolder(item.path);
+          else openFile(item.path);
+        };
+        listEl.appendChild(li);
+      });
+      pathEl.textContent = currentPath;
+    }
+
+    function navigateUp(key){
+      for(const k in manifest){
+        if(manifest[k].find(x=>x.type==="folder"&&x.path===key)){
+          current=k;currentPath="/"+k+"/";renderList(k);return;
+        }
+      }
+      current="root";currentPath="/";renderList("root");
+    }
+
+    function openFolder(path){
+      current=path;currentPath="/"+path+"/";renderList(path);
+    }
+
+    async function openFile(path){
+      viewer.classList.remove("hidden");
+      viewer.textContent="Загрузка...";
+      try{
+        const res=await fetch(path);
+        if(!res.ok) throw new Error(res.status);
+        const text=await res.text();
+        viewer.textContent=text;
+      }catch(e){
+        viewer.textContent="Ошибка: "+e.message;
+      }
+    }
+
+    loadManifest();
+  </script>
+</body>
+</html>
