@@ -10,7 +10,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Токен вашего бота
-TOKEN = '8566538172:AAEx5i6kMhwDHBApKDNSLKQcp_8-WXuRFKw'
+TOKEN = '8566538172:AAHFTXxjJ43lvZgRgxzLIuXIWRpS-tEW_WI'
 
 # Полный текст правил
 RULES_TEXT = """📜 Правила чата
