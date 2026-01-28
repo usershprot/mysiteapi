@@ -1,56 +1,69 @@
 import logging
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from aiogram import Bot, Dispatcher
+from aiogram.filters import Command
+from aiogram.types import Message
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+import asyncio
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(name)
+
+# Токен вашего бота (ВСТАВЬТЕ НОВЫЙ ТОКЕН ЗДЕСЬ!)
+BOT_TOKEN = "8104909560:AAHUS88zCrxDukxqMIOZBMIhVE3M3G4WjP8"
+
+# Инициализация бота для aiogram 3.7.0+
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
 )
-logger = logging.getLogger(__name__)
+dp = Dispatcher()
 
-TOKEN = '8566538172:AAHFTXxjJ43lvZgRgxzLIuXIWRpS-tEW_WI'
+# Текст правил в HTML формате с эмодзи
+RULES_HTML = """<tg-emoji emoji-id="5197269100878907942">✍️</tg-emoji> Правила чата
+<tg-emoji emoji-id="5424857974784925603">🚫</tg-emoji> Без спама и рекламы
+<tg-emoji emoji-id="4916086774649848789">🔗</tg-emoji> Без ссылок без разрешения админа
+<tg-emoji emoji-id="5352783059143901208">🖕</tg-emoji> Без оскорблений
+<tg-emoji emoji-id="5877488510637706502">🚫</tg-emoji> Запрещены мошеннические схемы
+<tg-emoji emoji-id="5318912942752669674">💻</tg-emoji> Запрещено просить взломать что либо
+<tg-emoji emoji-id="5422789690333883156">ℹ️</tg-emoji> Запрещено писать не по делу, (просить инструменты для DOX\\OSINT)
+<tg-emoji emoji-id="5206432422194849059">🔒</tg-emoji> Нарушение = мут / бан"""
 
-RULES_TEXT = """📜 Правила чата
-1. Без спама и рекламы
-2. Без ссылок без разрешения админа
-3. Без оскорблений
-4. Запрещены мошеннические схемы
-5. Запрещено просить взломать что либо
-6. Запрещено страдать хернёй, и просить инструменты для DOX\OSINT
+# Обработчик для #rules
+@dp.message(lambda message: message.text and "#rules" in message.text.lower())
+async def handle_rules(message: Message):
+    try:
+        # Отправляем с HTML эмодзи
+        await message.reply(RULES_HTML)
+        logger.info(f"Отправлены правила в чате: {message.chat.id}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке: {e}")
+        # Fallback на обычный текст
+        fallback_text = """✍️ Правила чата
+🚫 Без спама и рекламы
+🔗 Без ссылок без разрешения админа
+🖕 Без оскорблений
+🚫 Запрещены мошеннические схемы
+💻 Запрещено просить взломать что либо
+ℹ️ Запрещено писать не по делу, (просить инструменты для DOX\\OSINT)
 🔒 Нарушение = мут / бан"""
+        await message.reply(fallback_text)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Привет! Я бот-триггер. Если вы напишете сообщение с хэштегом #rules, "
-        "я отправлю полные правила группы. Также я реагирую на ключевые слова."
-    )
+# Команда для ручной отправки правил
+@dp.message(Command("rules"))
+async def cmd_rules(message: Message):
+    await handle_rules(message)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    text = message.text if message.text else ""
-    
-    # Проверяем, содержит ли сообщение хэштег #rules
-    if "#rules" in text.lower()
-        await message.reply_text(RULES_TEXT)
-        logger.info(f"Отправлены правила пользователю {message.from_user.id}")
-    
-    # Также можно добавить проверку на ключевые слова (опционально)
-    elif any(keyword in text.lower() for keyword in ["правила", "rules", "правила группы"]):
-        await message.reply_text("📋 Кажется, вы спрашиваете про правила? Добавьте #rules в сообщение, чтобы получить полный список!")
+# Команда для проверки бота
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    await message.reply("🤖 Бот работает! Отправьте #rules для получения правил")
 
-async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(RULES_TEXT)
-def main():
-    application = Application.builder().token(TOKEN).build()
-    
-    # Регистрируем обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("rules", rules_command))
+# Основная функция
+async def main():
+    logger.info("Бот запущен...")
+    await dp.start_polling(bot)
 
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("Бот запущен...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+if name == "main":
+    asyncio.run(main())
