@@ -8,10 +8,10 @@ import asyncio
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(name)
+logger = logging.getLogger(__name__)  # ДВОЙНОЕ подчеркивание с обеих сторон!
 
 # Токен вашего бота (ВСТАВЬТЕ НОВЫЙ ТОКЕН ЗДЕСЬ!)
-BOT_TOKEN = "8104909560:AAHUS88zCrxDukxqMIOZBMIhVE3M3G4WjP8"
+BOT_TOKEN = "НОВЫЙ_ТОКЕН_ЗДЕСЬ"
 
 # Инициализация бота для aiogram 3.7.0+
 bot = Bot(
@@ -65,5 +65,5 @@ async def main():
     logger.info("Бот запущен...")
     await dp.start_polling(bot)
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
