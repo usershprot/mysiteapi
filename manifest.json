@@ -1,9 +1,0 @@
-{
-  "root": [
-    {"type": "file", "name": "file.py", "path": "raw/file.py"},
-    {"type": "folder", "name": "src", "path": "src"}
-  ],
-  "src": [
-    {"type": "file", "name": "main.js", "path": "raw/src/main.js"}
-  ]
-}
