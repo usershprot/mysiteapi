@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)  # ДВОЙНОЕ подчеркивание с обеих сторон!
 
 # Токен вашего бота (ВСТАВЬТЕ НОВЫЙ ТОКЕН ЗДЕСЬ!)
-BOT_TOKEN = "НОВЫЙ_ТОКЕН_ЗДЕСЬ"
+BOT_TOKEN = "8104909560:AAHUS88zCrxDukxqMIOZBMIhVE3M3G4WjP8"
 
 # Инициализация бота для aiogram 3.7.0+
 bot = Bot(
