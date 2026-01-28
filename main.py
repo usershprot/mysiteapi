@@ -1,33 +1,67 @@
-import asyncio
-from aiogram import Bot, Dispatcher, types, F
+import logging
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Вставь сюда свой токен
+# Включим логирование
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Токен вашего бота
 TOKEN = '8566538172:AAEx5i6kMhwDHBApKDNSLKQcp_8-WXuRFKw'
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+# Полный текст правил
+RULES_TEXT = """📜 Правила чата
+1. Без спама и рекламы
+2. Без ссылок без разрешения админа
+3. Без оскорблений
+4. Запрещены мошеннические схемы
 
-# Обработчик сообщений, содержащих #rules
-@dp.message(F.text.lower.contains("#rules"))
-async def send_rules(message: types.Message):
-    rules_text = (
-        "📜 **Правила чата**\n\n"
-        "1. Без спама и рекламы\n"
-        "2. Без ссылок без разрешения админа\n"
-        "3. Без оскорблений\n"
-        "4. Запрещены мошеннические схемы\n\n"
-        "🔒 **Нарушение = мут / бан**"
+🔒 Нарушение = мут / бан"""
+
+# Функция для обработки команд
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Привет! Я бот-триггер. Если вы напишете сообщение с хэштегом #rules, "
+        "я отправлю полные правила группы. Также я реагирую на ключевые слова."
     )
-    
-    # Отвечаем на сообщение пользователя
-    await message.reply(rules_text, parse_mode="Markdown")
 
-async def main():
-    print("Бот запущен. Жду команду #rules...")
-    await dp.start_polling(bot)
+# Функция для обработки сообщений
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    text = message.text if message.text else ""
+    
+    # Проверяем, содержит ли сообщение хэштег #rules
+    if "#rules" in text.lower():
+        # Отправляем правила
+        await message.reply_text(RULES_TEXT)
+        logger.info(f"Отправлены правила пользователю {message.from_user.id}")
+    
+    # Также можно добавить проверку на ключевые слова (опционально)
+    elif any(keyword in text.lower() for keyword in ["правила", "rules", "правила группы"]):
+        await message.reply_text("📋 Кажется, вы спрашиваете про правила? Добавьте #rules в сообщение, чтобы получить полный список!")
+
+# Команда /rules для получения правил
+async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(RULES_TEXT)
+
+# Основная функция
+def main():
+    # Создаем приложение
+    application = Application.builder().token(TOKEN).build()
+    
+    # Регистрируем обработчики команд
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("rules", rules_command))
+    
+    # Регистрируем обработчик сообщений
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # Запускаем бота
+    print("Бот запущен...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Бот выключен")
+    main()
