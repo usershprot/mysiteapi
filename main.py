@@ -24,7 +24,7 @@ dp = Dispatcher()
 # Словарь для активных дуэлей
 active_duels = {}
 
-# Текст правил с твоим новым пунктом
+# Текст правил с твоим новым пунктом и ссылкой в конце
 RULES_HTML = """<tg-emoji emoji-id="5197269100878907942">✍️</tg-emoji> <b>Правила чата</b>
 <tg-emoji emoji-id="5424857974784925603">🚫</tg-emoji> Без спама и рекламы
 <tg-emoji emoji-id="4916086774649848789">🔗</tg-emoji> Без ссылок без разрешения админа
@@ -33,17 +33,19 @@ RULES_HTML = """<tg-emoji emoji-id="5197269100878907942">✍️</tg-emoji> <b>П
 <tg-emoji emoji-id="5318912942752669674">💻</tg-emoji> Запрещено просить взломать что либо
 <tg-emoji emoji-id="5422789690333883156">ℹ️</tg-emoji> Запрещено писать не по делу, (просить инструменты для DOX\\OSINT)
 <tg-emoji emoji-id="5258500400918587241">✍️</tg-emoji> Запрещено разговаривать на других языках кроме RU/ENG
-<tg-emoji emoji-id="5206432422194849059">🔒</tg-emoji> Нарушение = мут / бан"""
+<tg-emoji emoji-id="5206432422194849059">🔒</tg-emoji> Нарушение = мут / бан
 
-# --- ПРАВИЛА ---
+А кто не согласен с правилами читать <a href="https://hhroot.alwaysdata.net/">здесь</a>"""
+
+# --- ОБРАБОТЧИКИ ПРАВИЛ ---
 
 @dp.message(lambda message: message.text and "#rules" in message.text.lower())
 async def handle_rules_tag(message: Message):
-    await message.reply(RULES_HTML)
+    await message.reply(RULES_HTML, disable_web_page_preview=True)
 
 @dp.message(Command("rules"))
 async def cmd_rules(message: Message):
-    await message.reply(RULES_HTML)
+    await message.reply(RULES_HTML, disable_web_page_preview=True)
 
 # --- ДУЭЛЬ ---
 
@@ -54,7 +56,7 @@ async def cmd_duel(message: Message):
     
     chat_id = message.chat.id
     if chat_id in active_duels:
-        return await message.reply("⚠️ Кто-то уже вызвал на дуэль. Примите старый вызов!")
+        return await message.reply("⚠️ Дуэль уже предложена! Дождитесь принятия.")
 
     active_duels[chat_id] = message.from_user.id
     kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -62,7 +64,7 @@ async def cmd_duel(message: Message):
     ]])
 
     await message.answer(
-        f"🤺 <b>{message.from_user.full_name}</b> вызывает кого-нибудь на дуэль! Рискнете?",
+        f"🤺 <b>{message.from_user.full_name}</b> зарядил револьвер! Кто готов рискнуть?",
         reply_markup=kb
     )
 
@@ -75,7 +77,7 @@ async def process_duel(callback: CallbackQuery):
     if not p1_id:
         return await callback.answer("Дуэль завершена.")
     if p2_id == p1_id:
-        return await callback.answer("Нельзя стреляться с самим собой!", show_alert=True)
+        return await callback.answer("Стреляться с самим собой нельзя! 😅", show_alert=True)
 
     del active_duels[chat_id]
     await callback.message.edit_text(f"🔫 Барабан крутится... <b>{callback.from_user.full_name}</b> принял вызов!")
@@ -92,15 +94,15 @@ async def process_duel(callback: CallbackQuery):
             permissions=types.ChatPermissions(can_send_messages=False),
             until_date=timedelta(minutes=5)
         )
-        await callback.message.answer(f"💥 <b>БАБАХ!</b> {loser_name} получает мут на 5 минут!")
+        await callback.message.answer(f"💥 <b>БАБАХ!</b> {loser_name} словил маслину и умолк на 5 минут.")
     except Exception:
-        await callback.message.answer(f"🛡 Щелчок! Пуля не берет этого игрока (возможно, это админ).")
+        await callback.message.answer(f"🛡 Щелчок! Удачливый админ выжил.")
 
 # --- СТАРТ ---
 
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    await message.reply("🤖 Бот запущен!\n\n📜 #rules — правила\n🤺 /duel — дуэль с другом")
+    await message.reply("🤖 Бот запущен!\n\n📜 #rules — правила\n🤺 /duel — вызвать на дуэль")
 
 async def main():
     await dp.start_polling(bot)
