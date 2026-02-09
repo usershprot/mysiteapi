@@ -51,29 +51,32 @@ async def cmd_ai(message: Message):
     if not prompt:
         return await message.reply("Введите запрос, например: <code>/ai привет!</code>")
 
-    # Эффект "печатает"
     await bot.send_chat_action(message.chat.id, "typing")
 
     try:
-        # Запрос к Mistral Medium Latest
         chat_response = await asyncio.to_thread(
             mistral_client.chat.complete,
             model="mistral-medium-latest",
             messages=[{"role": "user", "content": prompt}]
         )
         
-        response_text = chat_response.choices[0].message.content
+        raw_text = chat_response.choices[0].message.content
         
-        # Если текст слишком длинный, обрезаем его для Telegram
-        if len(response_text) > 4000:
-            response_text = response_text[:4000] + "..."
+        # Ограничение по длине (чуть меньше 4096, чтобы влезли теги цитаты)
+        if len(raw_text) > 3500:
+            raw_text = raw_text[:3500] + "..."
             
-        await message.reply(response_text, parse_mode=None)
+        # Оборачиваем ответ в цитату (blockquote)
+        # Мы используем экранирование, чтобы символы < и > из ответа ИИ не ломали HTML бота
+        safe_text = raw_text.replace("<", "&lt;").replace(">", "&gt;")
+        formatted_response = f"<blockquote>{safe_text}</blockquote>"
+            
+        await message.reply(formatted_response, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error(f"Mistral Error: {e}")
         await message.reply("❌ Не удалось получить ответ от Mistral AI.")
 
-# --- ПРАВИЛА ---
+# --- ОСТАЛЬНЫЕ КОМАНДЫ (Правила и Дуэль) ---
 
 @dp.message(lambda message: message.text and "#rules" in message.text.lower())
 async def handle_rules_tag(message: Message):
@@ -82,8 +85,6 @@ async def handle_rules_tag(message: Message):
 @dp.message(Command("rules"))
 async def cmd_rules(message: Message):
     await message.reply(RULES_HTML, disable_web_page_preview=True)
-
-# --- ДУЭЛЬ ---
 
 @dp.message(Command("duel"))
 async def cmd_duel(message: Message):
@@ -120,11 +121,9 @@ async def process_duel(callback: CallbackQuery):
     except:
         await callback.message.answer("🛡 Щелчок! Это был админ.")
 
-# --- СТАРТ ---
-
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
-    await message.reply("🤖 Бот готов!\n\n📜 #rules — правила\n🤺 /duel — дуэль\n🤖 /ai [запрос] — ИИ Mistral")
+    await message.reply("🤖 Бот готов!\n\n📜 #rules — правила\n🤺 /duel — дуэль\n🤖 /ai — ИИ Mistral")
 
 async def main():
     await dp.start_polling(bot)
