@@ -5,7 +5,6 @@ import json
 import os
 import re
 from datetime import timedelta
-from time import time
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
@@ -18,7 +17,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from mistralai import Mistral
+# Импортируем OpenAI для работы с OpenRouter
+from openai import AsyncOpenAI
 
 # --- 1. УПРАВЛЕНИЯ ДАННЫМИ ---
 
@@ -42,7 +42,7 @@ class ConfigManager:
     def __init__(self, path="config.json"):
         self.path = path
         self.data = BotStorage.load_json(path, {
-            "model": "open-mistral-7b",
+            "model": "qwen/qwen-2.5-coder-32b-instruct:free", # Рекомендуемое ID для Qwen 3 Coder на OpenRouter
             "prompt": "Ты — Джарвис, ироничный ассистент S010lvloon. Отвечай кратко.",
             "rules": "Правила не установлены.",
             "context_size": 10
@@ -66,25 +66,28 @@ class HistoryManager:
 
     def get_history(self, key: str): return self.data.get(key, [])
 
-# --- 2. ЛОГИКА ИИ ---
+# --- 2. ЛОГИКА ИИ (OpenRouter) ---
 
 class AIProcessor:
     def __init__(self, api_key: str, config: ConfigManager):
-        self.client = Mistral(api_key=api_key)
+        # Настройка клиента под OpenRouter
+        self.client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
         self.config = config
 
     async def chat(self, messages: List[Dict]) -> Optional[str]:
         try:
             full_msgs = [{"role": "system", "content": self.config.get("prompt")}] + messages
-            response = await asyncio.to_thread(
-                self.client.chat.complete,
+            response = await self.client.chat.completions.create(
                 model=self.config.get("model"),
                 messages=full_msgs
             )
             return response.choices[0].message.content
         except Exception as e:
             logging.error(f"AI Error: {e}")
-            return None
+            return f"Ошибка ИИ: {e}"
 
 # --- 3. СОСТОЯНИЯ FSM ---
 
@@ -99,21 +102,16 @@ class AdminStates(StatesGroup):
 router = Router()
 AI_TRIGGER = r"(?i)^(/ai|джарвис|sai|s2)\b"
 
-# --- Команда СТАРТ ---
 @router.message(Command("start"))
 async def start_handler(msg: Message):
     welcome_text = (
-        "<b>🤖 Привет! Я Джарвис, твой личный ассистент S010lvloon.</b>\n\n"
-        "Вот что я умею:\n"
-        "🔹 <b>ИИ Чат:</b> Просто напиши мне: <i>Джарвис, как дела?</i> или используй /ai, sai, s2.\n"
-        "🔹 <b>Бизнес-режим:</b> В личных переписках я могу редактировать твои сообщения, оформляя их красиво.\n"
-        "🔹 <b>Правила:</b> Введи /rules или напиши #rules, чтобы освежить память.\n"
-        "🔹 <b>Дуэль:</b> Проверь удачу командой /duel (только в группах).\n\n"
-        "<i>Используй меня с умом. Удачи!</i>"
+        "<b>🤖 Привет! Я Джарвис (OpenRouter Edition).</b>\n\n"
+        "🔹 <b>ИИ Чат:</b> Напиши: <i>Джарвис, код на Python?</i>\n"
+        "🔹 <b>Бизнес-режим:</b> Редактирую твои сообщения в личке.\n"
+        "🔹 <b>Дуэль:</b> /duel в группах."
     )
     await msg.answer(welcome_text)
 
-# --- Обработка ИИ ---
 @router.business_message(F.text.regexp(AI_TRIGGER))
 @router.message(F.text.regexp(AI_TRIGGER))
 async def ai_handler(msg: Message, ai: AIProcessor, history: HistoryManager, config: ConfigManager):
@@ -142,7 +140,7 @@ async def ai_handler(msg: Message, ai: AIProcessor, history: HistoryManager, con
         else:
             await msg.reply(final_text)
 
-# --- Остальные команды ---
+# (Остальные обработчики дуэли и админки остаются без изменений...)
 @router.message(Command("rules"))
 @router.message(lambda m: m.text and "#rules" in m.text.lower())
 async def rules_handler(msg: Message, config: ConfigManager):
@@ -176,7 +174,6 @@ async def duel_callback(call: CallbackQuery):
     except:
         await call.message.answer("🛡 Осечка (админский щит)!")
 
-# --- Админка ---
 @router.message(Command("S2HFHF"))
 async def admin_start(msg: Message, state: FSMContext):
     await msg.answer("🔑 Пароль:")
@@ -226,12 +223,15 @@ async def main():
     load_dotenv()
     logging.basicConfig(level=logging.INFO)
     
+    # Можно заменить прямо здесь или через .env
+    OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "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")
+    
     bot = Bot(token=os.getenv("BOT_TOKEN"), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
     
     cfg = ConfigManager()
     hist = HistoryManager()
-    ai = AIProcessor(api_key=os.getenv("MISTRAL_API_KEY"), config=cfg)
+    ai = AIProcessor(api_key=OPENROUTER_KEY, config=cfg)
 
     dp.include_router(router)
     await dp.start_polling(bot, config=cfg, history=hist, ai=ai)
