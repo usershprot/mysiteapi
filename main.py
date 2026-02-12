@@ -17,11 +17,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# Импортируем OpenAI для работы с OpenRouter
-from openai import AsyncOpenAI
+# Импортируем Cerebras
+from cerebras.cloud.sdk import Cerebras
 
 # --- 1. УПРАВЛЕНИЯ ДАННЫМИ ---
-
 class BotStorage:
     @staticmethod
     def load_json(file_path: str, default: dict) -> dict:
@@ -29,7 +28,7 @@ class BotStorage:
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except:
+            except Exception:
                 return default
         return default
 
@@ -42,8 +41,8 @@ class ConfigManager:
     def __init__(self, path="config.json"):
         self.path = path
         self.data = BotStorage.load_json(path, {
-            "model": "qwen/qwen-2.5-coder-32b-instruct:free", # Рекомендуемое ID для Qwen 3 Coder на OpenRouter
-            "prompt": "Ты — Джарвис, ироничный ассистент S010lvloon. Отвечай кратко.",
+            "model": "llama-3.3-70b", 
+            "prompt": "Ты — Джарвис, ироничный ассистент. Отвечай кратко и на русском.",
             "rules": "Правила не установлены.",
             "context_size": 10
         })
@@ -66,31 +65,31 @@ class HistoryManager:
 
     def get_history(self, key: str): return self.data.get(key, [])
 
-# --- 2. ЛОГИКА ИИ (OpenRouter) ---
-
+# --- 2. ЛОГИКА ИИ (Cerebras) ---
 class AIProcessor:
     def __init__(self, api_key: str, config: ConfigManager):
-        # Настройка клиента под OpenRouter
-        self.client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-        )
+        self.client = Cerebras(api_key=api_key)
         self.config = config
 
     async def chat(self, messages: List[Dict]) -> Optional[str]:
         try:
+            # Запускаем синхронный вызов Cerebras в отдельном потоке, чтобы не блокировать бот
+            loop = asyncio.get_event_loop()
             full_msgs = [{"role": "system", "content": self.config.get("prompt")}] + messages
-            response = await self.client.chat.completions.create(
-                model=self.config.get("model"),
-                messages=full_msgs
+            
+            response = await loop.run_in_executor(
+                None, 
+                lambda: self.client.chat.completions.create(
+                    model=self.config.get("model"),
+                    messages=full_msgs
+                )
             )
             return response.choices[0].message.content
         except Exception as e:
-            logging.error(f"AI Error: {e}")
-            return f"Ошибка ИИ: {e}"
+            logging.error(f"Cerebras AI Error: {e}")
+            return f"⚠️ Ошибка ИИ: {e}"
 
 # --- 3. СОСТОЯНИЯ FSM ---
-
 class AdminStates(StatesGroup):
     waiting_auth = State()
     menu = State()
@@ -98,54 +97,39 @@ class AdminStates(StatesGroup):
     editing_rules = State()
 
 # --- 4. ОБРАБОТЧИКИ ---
-
 router = Router()
 AI_TRIGGER = r"(?i)^(/ai|джарвис|sai|s2)\b"
 
 @router.message(Command("start"))
 async def start_handler(msg: Message):
     welcome_text = (
-        "<b>🤖 Привет! Я Джарвис (OpenRouter Edition).</b>\n\n"
-        "🔹 <b>ИИ Чат:</b> Напиши: <i>Джарвис, код на Python?</i>\n"
-        "🔹 <b>Бизнес-режим:</b> Редактирую твои сообщения в личке.\n"
+        "<b>🤖 Привет! Я Джарвис (Cerebras Powered).</b>\n\n"
+        "🔹 <b>ИИ Чат:</b> Напиши: <i>Джарвис, как дела?</i>\n"
+        "🔹 <b>Бизнес-режим:</b> Работает в личке.\n"
         "🔹 <b>Дуэль:</b> /duel в группах."
     )
     await msg.answer(welcome_text)
 
-@router.business_message(F.text.regexp(AI_TRIGGER))
 @router.message(F.text.regexp(AI_TRIGGER))
 async def ai_handler(msg: Message, ai: AIProcessor, history: HistoryManager, config: ConfigManager):
     user_key = f"{msg.chat.id}_{msg.from_user.id}"
     query = re.sub(AI_TRIGGER, "", msg.text, flags=re.IGNORECASE).strip()
     if not query: return
 
-    if not msg.business_connection_id:
-        await msg.bot.send_chat_action(msg.chat.id, ChatAction.TYPING)
+    # Эффект "печатает"
+    await msg.bot.send_chat_action(msg.chat.id, ChatAction.TYPING)
 
     history.add_msg(user_key, "user", query, config.get("context_size"))
     response = await ai.chat(history.get_history(user_key))
 
     if response:
         history.add_msg(user_key, "assistant", response, config.get("context_size"))
+        # Экранируем HTML символы
         clean_res = response.replace("<", "&lt;").replace(">", "&gt;")[:3500]
-        final_text = f"<blockquote>💻 {msg.text[:200]}</blockquote>\n<blockquote>🤖 {clean_res}</blockquote>"
+        final_text = f"💻 <b>Вопрос:</b> {query[:100]}...\n\n🤖 <b>Джарвис:</b>\n{clean_res}"
+        await msg.reply(final_text)
 
-        if msg.business_connection_id:
-            await msg.bot.edit_message_text(
-                business_connection_id=msg.business_connection_id,
-                chat_id=msg.chat.id,
-                message_id=msg.message_id,
-                text=final_text
-            )
-        else:
-            await msg.reply(final_text)
-
-# (Остальные обработчики дуэли и админки остаются без изменений...)
-@router.message(Command("rules"))
-@router.message(lambda m: m.text and "#rules" in m.text.lower())
-async def rules_handler(msg: Message, config: ConfigManager):
-    await msg.answer(config.get("rules"), disable_web_page_preview=True)
-
+# --- 5. ДУЭЛЬ И АДМИНКА ---
 @router.message(Command("duel"))
 async def duel_handler(msg: Message):
     if msg.chat.type == "private": return
@@ -158,10 +142,10 @@ async def duel_handler(msg: Message):
 async def duel_callback(call: CallbackQuery):
     challenger_id = int(call.data.split("_")[1])
     if call.from_user.id == challenger_id:
-        return await call.answer("Нельзя играть с собой!", show_alert=True)
+        return await call.answer("Нельзя стреляться с собой!", show_alert=True)
     
     await call.message.edit_text("🔫 Барабан крутится...")
-    await asyncio.sleep(2)
+    await asyncio.sleep(1.5)
     
     loser = random.choice([challenger_id, call.from_user.id])
     try:
@@ -170,71 +154,57 @@ async def duel_callback(call: CallbackQuery):
             permissions=types.ChatPermissions(can_send_messages=False),
             until_date=timedelta(minutes=5)
         )
-        await call.message.answer(f"💥 БАБАХ! Мут на 5 минут.")
-    except:
-        await call.message.answer("🛡 Осечка (админский щит)!")
+        await call.message.answer(f"💥 БАБАХ! Один готов. Мут на 5 минут.")
+    except Exception:
+        await call.message.answer("🛡 Осечка! (У игрока иммунитет/админка)")
 
+# Пароль для входа: S2HFHF
 @router.message(Command("S2HFHF"))
 async def admin_start(msg: Message, state: FSMContext):
-    await msg.answer("🔑 Пароль:")
+    await msg.answer("🔑 Введите секретный код:")
     await state.set_state(AdminStates.waiting_auth)
 
 @router.message(AdminStates.waiting_auth)
 async def admin_auth(msg: Message, state: FSMContext):
-    if msg.text == os.getenv("ADMIN_PASSWORD", "import"):
+    if msg.text == os.getenv("ADMIN_PASSWORD", "admin123"):
         await state.set_state(AdminStates.menu)
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📝 Промт", callback_data="set_prompt")],
-            [InlineKeyboardButton(text="📜 Правила", callback_data="set_rules")],
+            [InlineKeyboardButton(text="📝 Изменить Промт", callback_data="set_prompt")],
             [InlineKeyboardButton(text="❌ Выход", callback_data="exit")]
         ])
-        await msg.answer("⚙️ Панель Джарвиса:", reply_markup=kb)
+        await msg.answer("⚙️ Настройки ИИ:", reply_markup=kb)
     else:
         await msg.answer("❌ Доступ закрыт.")
         await state.clear()
-
-@router.callback_query(F.data == "set_prompt", AdminStates.menu)
-async def edit_p(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text("Введи новый системный промт:")
-    await state.set_state(AdminStates.editing_prompt)
-
-@router.callback_query(F.data == "set_rules", AdminStates.menu)
-async def edit_r(call: CallbackQuery, state: FSMContext):
-    await call.message.edit_text("Введи новый HTML для правил:")
-    await state.set_state(AdminStates.editing_rules)
-
-@router.message(AdminStates.editing_prompt)
-@router.message(AdminStates.editing_rules)
-async def admin_save(msg: Message, state: FSMContext, config: ConfigManager):
-    curr = await state.get_state()
-    key = "prompt" if curr == AdminStates.editing_prompt else "rules"
-    config.set(key, msg.text)
-    await msg.answer("✅ Сохранено!")
-    await state.set_state(AdminStates.menu)
 
 @router.callback_query(F.data == "exit")
 async def exit_adm(call: CallbackQuery, state: FSMContext):
     await state.clear()
     await call.message.delete()
 
-# --- 5. ЗАПУСК ---
-
+# --- 6. ЗАПУСК ---
 async def main():
     load_dotenv()
     logging.basicConfig(level=logging.INFO)
     
-    # Можно заменить прямо здесь или через .env
-    OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY", "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")
-    
-    bot = Bot(token=os.getenv("BOT_TOKEN"), default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # API Ключи
+    BOT_TOKEN = os.getenv("BOT_TOKEN")
+    CEREBRAS_KEY = os.getenv("CEREBRAS_API_KEY")
+
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
     
     cfg = ConfigManager()
     hist = HistoryManager()
-    ai = AIProcessor(api_key=OPENROUTER_KEY, config=cfg)
+    ai = AIProcessor(api_key=CEREBRAS_KEY, config=cfg)
 
     dp.include_router(router)
+    
+    print("🚀 Бот запущен!")
     await dp.start_polling(bot, config=cfg, history=hist, ai=ai)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Бот остановлен")
