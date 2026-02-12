@@ -1,5 +1,7 @@
-aiogram>=3.7.0
-mistralai>=1.12.0
-pydantic>=2.0.0
-httpx>=0.25.0
-dotenv
+# Telegram Bot Token (обязательно)
+BOT_TOKEN=8104909560:AAHUS88zCrxDukxqMIOZBMIhVE3M3G4WjP8
+# OpenRouter API Key (обязательно)
+OPENROUTER_API_KEY=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
+
+# Пароль для админ-панели (необязательно, по умолчанию "import")
+ADMIN_PASSWORD=import
